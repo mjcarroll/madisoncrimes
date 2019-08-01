@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block content %}
+<table id="reports" class="display" style="width:100%">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Report Type</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            <th>Pages</th>
+            <th>On Madison</th>
+            <th>Downloaded</th>
+            <th>Converted</th>
+            <th>Inserted</th>
+        </tr>
+    </thead>
+    <tfoot>
+        <tr>
+            <th>ID</th>
+            <th>Report Type</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            <th>Pages</th>
+            <th>On Madison</th>
+            <th>Downloaded</th>
+            <th>Converted</th>
+            <th>Inserted</th>
+        </tr>
+    </tfoot>
+</table>
+{% endblock %}
+
+{% block script %}
+<script>
+    $(document).ready(function() {
+        $('#reports').DataTable({
+            "ajax": '/api/reports',
+            "columns": [
+                { data: "id", 
+                  render: function (data, type, row) {
+                      return '<a href="/reports/' + data + '">' + data + "</a>";
+                }},
+                { data: "report_type" },
+                { data: "start_date" },
+                { data: "end_date" },
+                { data: "pages" },
+                { data: "on_madison" },
+                { data: "downloaded" },
+                { data: "converted" },
+                { data: "inserted" },
+            ]
+        });
+    });
+</script>
+{% endblock %}

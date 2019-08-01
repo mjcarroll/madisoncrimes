@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Heatmaps</title>
+    <link rel="stylesheet" 
+          href="https://unpkg.com/leaflet@1.5.1/dist/leaflet.css"
+          integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+          crossorigin=""/>
+    <style>
+        #mapid { height: 800px; }
+    </style>
+  </head>
+  <body>
+    <div id="mapid"></div>
+    <script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js"
+            integrity="sha512-GffPMF3RvMeYyc1LWMHtK8EbPv0iNZ8/oTtHPx9/cc2ILxQ+u905qIwdpULaqDkyBKgOaB57QTMg7ztg8Jm2Og=="
+            crossorigin=""></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"
+            crossorigin=""></script>
+    <script>
+        var map;
+        function initmap() {
+            // set up the map
+            map = new L.Map('mapid');
+
+            // create the tile layer with correct attribution
+            var osmUrl='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+            var osmAttrib='Map data © <a href="https://openstreetmap.org">OpenStreetMap</a> contributors';
+            var osm = new L.TileLayer(osmUrl, {minZoom: 8, maxZoom: 15, attribution: osmAttrib});		
+
+            map.setView(new L.LatLng(
+                34.7119424,-86.7958602),13);
+            map.addLayer(osm);
+        }
+
+        function add_heat() {
+            fetch('/api/records').then(
+                function(response) {
+                    return response.json();
+                }).then(
+                function(data) {
+                    let points = [];
+
+                    console.log('adding: ' + data.data.length)
+                    for(var ii = 0; ii < data.data.length; ++ii) {
+                        d = data.data[ii];
+                        if(!d.location.needs_moderation)
+                        {
+                            points.push(
+                                [d.location.latitude, d.location.longitude]
+                            );
+                        }
+                    }
+                    var heat = L.heatLayer(points, {radius: 5}).addTo(map);
+                });
+        }
+
+        initmap();
+        add_heat();
+    </script>
+  </body>
+</html>
