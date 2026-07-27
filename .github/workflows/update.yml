@@ -27,8 +27,8 @@ jobs:
         with:
           repository: mjcarroll/madisoncrimes-data
           path: madisoncrimes-data
-          # PAT with write access to the data repo; falls back to read-only checkout
-          token: ${{ secrets.DATA_REPO_TOKEN || github.token }}
+          # deploy key with write access to the data repo (also used for the push)
+          ssh-key: ${{ secrets.DATA_REPO_DEPLOY_KEY }}
 
       - name: Install poppler
         run: sudo apt-get update && sudo apt-get install -y poppler-utils

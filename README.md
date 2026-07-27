@@ -40,8 +40,10 @@ sync → geocode → build, commits new PDFs and geocodes back to the data repo,
 and deploys `site/` to GitHub Pages. It needs:
 
 - GitHub Pages enabled for the repo (Settings → Pages → GitHub Actions source)
-- a `DATA_REPO_TOKEN` repo secret: a fine-grained PAT with contents write
-  access to `madisoncrimes-data`, so the workflow can push new data
+- a deploy key so the workflow can push new data:
+  `ssh-keygen -t ed25519 -f deploy_key -N ""`, add `deploy_key.pub` to
+  `madisoncrimes-data` → Settings → Deploy keys with **write access**, and add
+  the private `deploy_key` as a `DATA_REPO_DEPLOY_KEY` secret on this repo
 
 ## How it works
 
