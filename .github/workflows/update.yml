@@ -1,0 +1,69 @@
+name: Update data and deploy site
+
+on:
+  schedule:
+    - cron: "17 9 * * 1" # weekly, Monday morning
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out data repo
+        uses: actions/checkout@v4
+        with:
+          repository: mjcarroll/madisoncrimes-data
+          path: madisoncrimes-data
+          # PAT with write access to the data repo; falls back to read-only checkout
+          token: ${{ secrets.DATA_REPO_TOKEN || github.token }}
+
+      - name: Install poppler
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Sync new reports from the city archive
+        run: uv run madisoncrimes sync
+
+      - name: Geocode new locations
+        run: uv run madisoncrimes geocode
+
+      - name: Build site data
+        run: uv run madisoncrimes build
+
+      - name: Push data repo updates
+        if: github.event_name != 'push'
+        working-directory: madisoncrimes-data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Automated sync $(date -u +%F)"
+          git push
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

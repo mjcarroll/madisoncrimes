@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.ruff_cache/
+.pytest_cache/
+dist/
+
+# local clone of the data repo (github.com/mjcarroll/madisoncrimes-data)
+madisoncrimes-data/
+
+# generated static site data
+site/data/
