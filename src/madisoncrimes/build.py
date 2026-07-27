@@ -5,15 +5,11 @@ Output schema (site/data/records.json):
     locations:  list of raw location strings; records reference them by index
     records:    [lat, lon, "YYYY-MM-DD", hour|null, shift|null, type, [catIdx...], locIdx|null]
                 lat/lon are null when the location isn't geocoded; type 0=incident 1=arrest
-    case_gaps:  [[year, published, span], ...] — how many sequential case numbers
-                the year's published reports cover vs. the span they imply exists
 
 Arrestee names and residences are deliberately never exported.
 """
 
 import json
-import re
-from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
@@ -24,40 +20,6 @@ from .parse import parse_all
 
 TYPE_INCIDENT = 0
 TYPE_ARREST = 1
-
-# "B11-000726" / "18-000057" / "26M003276" -> (series, year, sequence number)
-CASE_RE = re.compile(r"^([A-Z]?)(\d{2})([A-Z]?)0*(\d+)$")
-
-
-def case_key(case: str) -> tuple[str, int, int] | None:
-    m = CASE_RE.match(case.replace("-", ""))
-    if not m:
-        return None
-    series = m.group(1) or m.group(3) or "#"
-    return series, 2000 + int(m.group(2)), int(m.group(4))
-
-
-def case_gaps(records) -> list[list[int]]:
-    """Per year: how many distinct case numbers were published vs. the sequence
-    span they cover. Case numbers are sequential, so the span approximates every
-    case the department opened in that window — published or not."""
-    seen: dict[tuple[int, str], set[int]] = defaultdict(set)
-    for r in records:
-        key = case_key(r.case)
-        if key:
-            series, year, seq = key
-            seen[(year, series)].add(seq)
-    years: dict[int, list[int]] = defaultdict(lambda: [0, 0])
-    for (year, _series), seqs in seen.items():
-        if len(seqs) < 30:  # ignore noise series (typos, misfiled reports)
-            continue
-        # trim 0.5% off both ends so a typo'd case number (B13-009999) can't inflate the span
-        ordered = sorted(seqs)
-        lo = ordered[int(len(ordered) * 0.005)]
-        hi = ordered[min(int(len(ordered) * 0.995), len(ordered) - 1)]
-        years[year][0] += len(seqs)
-        years[year][1] += hi - lo + 1
-    return [[year, published, span] for year, (published, span) in sorted(years.items())]
 
 
 def canon_location(location: str) -> str:
@@ -131,7 +93,6 @@ def build_site_data(data: DataDir, site_dir: Path) -> dict:
         },
         "categories": [name for name, _ in sorted(cat_index.items(), key=lambda kv: kv[1])],
         "locations": loc_names,
-        "case_gaps": case_gaps(incidents + arrests),
         "records": records,
     }
     dest = site_dir / "data"

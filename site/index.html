@@ -166,17 +166,10 @@ footer a { color: var(--ink-2); }
       <p class="sub">Incident reports with a timestamp</p>
       <div id="chart-hours"></div>
     </div>
-    <div class="card">
+    <div class="card span2">
       <h2>Repeat locations</h2>
       <p class="sub">Most-reported blocks in view &mdash; click to zoom the map</p>
       <div id="top-locations"></div>
-    </div>
-    <div class="card">
-      <h2>How much gets published?</h2>
-      <p class="sub">Case numbers are sequential, so gaps between published reports reveal
-         cases that never appear in the public archive. All years, unfiltered; 2025 is low
-         because the archive itself is missing months.</p>
-      <div id="chart-gaps"></div>
     </div>
   </div>
 
@@ -534,45 +527,6 @@ function topLocations(recs, pts) {
   box.appendChild(tbl);
 }
 
-function gapChart() {
-  const box = document.getElementById("chart-gaps");
-  box.replaceChildren();
-  const gaps = DATA.case_gaps;
-  if (!gaps.length) return;
-  const W = Math.max(box.clientWidth, 280), H = 170, B = 20, T = 12, L = 36;
-  const bw = (W - L - 6) / gaps.length;
-  const svg = el("svg", { width: "100%", viewBox: `0 0 ${W} ${H}`, role: "img",
-                          "aria-label": "Share of case numbers published, per year" }, box);
-  for (const g of [1, 0.5]) {
-    const y = T + (H - T - B) * (1 - g);
-    el("line", { x1: L, x2: W - 6, y1: y, y2: y, stroke: cssVar("--grid") }, svg);
-    el("text", { x: L - 6, y: y + 4, "text-anchor": "end" }, svg)
-      .textContent = g * 100 + "%";
-  }
-  el("line", { x1: L, x2: W - 6, y1: H - B, y2: H - B, stroke: cssVar("--axis") }, svg);
-  gaps.forEach(([year, published, span], i) => {
-    const pct = published / span;
-    const bh = (H - T - B) * pct;
-    const bar = el("rect", { x: L + i * bw + 1, y: H - B - bh, width: bw - 2,
-                             height: Math.max(bh, 1), rx: 3, fill: cssVar("--accent") }, svg);
-    if (i % 2 === 0 || gaps.length <= 8) {
-      el("text", { x: L + i * bw + bw / 2, y: H - 5, "text-anchor": "middle" }, svg)
-        .textContent = year;
-    }
-    const hit = el("rect", { x: L + i * bw, y: 0, width: bw, height: H,
-                             fill: "transparent" }, svg);
-    hit.addEventListener("pointermove", ev => {
-      bar.setAttribute("fill", cssVar("--accent-strong"));
-      showTip(tipRows(Math.round(pct * 100) + "% published",
-        `${year}: ${published.toLocaleString()} of ~${span.toLocaleString()} case numbers`),
-        ev.clientX, ev.clientY);
-    });
-    hit.addEventListener("pointerleave", () => {
-      bar.setAttribute("fill", cssVar("--accent")); hideTip();
-    });
-  });
-}
-
 /* ---------- render ---------- */
 function renderAll() {
   const recs = filtered();
@@ -595,11 +549,11 @@ function renderAll() {
   hourChart(recs);
   weekGrid(recs);
   topLocations(recs, pts);
-  gapChart();
 }
 
 /* ---------- boot ---------- */
-fetch("data/records.json").then(r => r.json()).then(data => {
+// no-cache: always revalidate so a fresh deploy can't pair new HTML with stale data
+fetch("data/records.json", { cache: "no-cache" }).then(r => r.json()).then(data => {
   DATA = data;
   catNames = data.categories;
   document.getElementById("f-generated").textContent = data.generated || "";
