@@ -219,8 +219,21 @@ function setBasemap() {
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' }
   ).addTo(map);
 }
-/* Sequential blue ramp (light -> dark = low -> high density). */
-const HEAT_GRADIENT = { 0.15: "#cde2fb", 0.4: "#86b6ef", 0.65: "#3987e5", 0.85: "#1c5cab", 1: "#0d366b" };
+/* Sequential blue ramp: on a light map more = darker, on a dark map more = brighter,
+   so high density always moves away from the surface. */
+const HEAT_GRADIENT_LIGHT =
+  { 0.15: "#cde2fb", 0.4: "#86b6ef", 0.65: "#3987e5", 0.85: "#1c5cab", 1: "#0d366b" };
+const HEAT_GRADIENT_DARK =
+  { 0.15: "#184f95", 0.4: "#2a78d6", 0.65: "#5598e7", 0.85: "#9ec5f4", 1: "#cde2fb" };
+/* Pixel radius tracks zoom so hotspots stay geographically sized instead of
+   smearing: correct at BASE_ZOOM, halved/doubled per zoom level away from it. */
+const BASE_ZOOM = 12, BASE_RADIUS = 10;
+function heatOptions() {
+  const r = Math.min(Math.max(BASE_RADIUS * 2 ** (map.getZoom() - BASE_ZOOM), 4), 64);
+  return { radius: r, blur: r * 0.7, minOpacity: 0.1,
+           gradient: themeIsDark() ? HEAT_GRADIENT_DARK : HEAT_GRADIENT_LIGHT };
+}
+map.on("zoomend", () => { if (heatLayer) heatLayer.setOptions(heatOptions()); });
 
 /* ---------- filtering ---------- */
 function inPeriod(dateStr) {
@@ -426,8 +439,7 @@ function renderAll() {
     ? recs[0][R_DATE].slice(0, 7) + " – " + recs.at(-1)[R_DATE].slice(0, 7) : "–";
 
   if (heatLayer) map.removeLayer(heatLayer);
-  heatLayer = L.heatLayer(pts.map(r => [r[R_LAT], r[R_LON], 1]),
-    { radius: 9, blur: 12, gradient: HEAT_GRADIENT, minOpacity: 0.25 }).addTo(map);
+  heatLayer = L.heatLayer(pts.map(r => [r[R_LAT], r[R_LON], 0.3]), heatOptions()).addTo(map);
 
   monthlyChart(recs);
 
