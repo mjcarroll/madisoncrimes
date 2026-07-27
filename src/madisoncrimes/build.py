@@ -73,10 +73,9 @@ def display_location(location: str) -> str:
     tokens = location.split()
     while tokens and tokens[-1].upper().strip(",") in ("MAD", "MADISON", "AL"):
         tokens.pop()
-    cleaned = " ".join(tokens)
-    if cleaned.isupper():
-        cleaned = cleaned.title().replace(" Of ", " of ")
-    return cleaned
+    # de-shout the new-format strings, keeping short directionals (NW, W) as-is
+    tokens = [t.title() if t.isupper() and len(t) > 2 else t for t in tokens]
+    return " ".join(tokens).replace(" Of ", " of ")
 
 
 def build_site_data(data: DataDir, site_dir: Path) -> dict:
