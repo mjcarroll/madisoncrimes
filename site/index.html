@@ -151,6 +151,11 @@ footer a { color: var(--ink-2); }
       <div id="chart-monthly"></div>
       <details><summary>View as table</summary><div id="table-monthly"></div></details>
     </div>
+    <div class="card span2">
+      <h2>Week at a glance</h2>
+      <p class="sub">Incident reports by day of week and hour</p>
+      <div id="chart-week"></div>
+    </div>
     <div class="card">
       <h2>Top categories</h2>
       <p class="sub">Share of reports in view</p>
@@ -160,6 +165,18 @@ footer a { color: var(--ink-2); }
       <h2>Time of day</h2>
       <p class="sub">Incident reports with a timestamp</p>
       <div id="chart-hours"></div>
+    </div>
+    <div class="card">
+      <h2>Repeat locations</h2>
+      <p class="sub">Most-reported blocks in view &mdash; click to zoom the map</p>
+      <div id="top-locations"></div>
+    </div>
+    <div class="card">
+      <h2>How much gets published?</h2>
+      <p class="sub">Case numbers are sequential, so gaps between published reports reveal
+         cases that never appear in the public archive. All years, unfiltered; 2025 is low
+         because the archive itself is missing months.</p>
+      <div id="chart-gaps"></div>
     </div>
   </div>
 
@@ -179,11 +196,23 @@ footer a { color: var(--ink-2); }
 "use strict";
 /* Record layout (see build.py):
    [lat, lon, "YYYY-MM-DD", hour|null, shift|null, type, [catIdx...]] */
-const R_LAT = 0, R_LON = 1, R_DATE = 2, R_HOUR = 3, R_TYPE = 5, R_CATS = 6;
+const R_LAT = 0, R_LON = 1, R_DATE = 2, R_HOUR = 3, R_TYPE = 5, R_CATS = 6, R_LOC = 7;
 const TOP_CATS = 18;
 
 const state = { period: "all", type: "all", cat: "all" };
 let DATA = null, catNames = [], topCatIdx = [];
+
+/* sequential blue ramp for heat cells, stepped for each surface */
+const RAMP_LIGHT = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"];
+const RAMP_DARK = ["#184f95", "#2a78d6", "#5598e7", "#9ec5f4", "#cde2fb"];
+function rampColor(t) {
+  const stops = themeIsDark() ? RAMP_DARK : RAMP_LIGHT;
+  const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+  const i = Math.min(Math.floor(x), stops.length - 2), f = x - i;
+  const hex = s => [1, 3, 5].map(k => parseInt(s.slice(k, k + 2), 16));
+  const [a, b] = [hex(stops[i]), hex(stops[i + 1])];
+  return "rgb(" + a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(",") + ")";
+}
 
 /* ---------- theme ---------- */
 const root = document.documentElement;
@@ -429,6 +458,121 @@ function hourChart(recs) {
   }
 }
 
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function weekGrid(recs) {
+  const box = document.getElementById("chart-week");
+  box.replaceChildren();
+  const counts = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  let max = 0;
+  for (const r of recs) {
+    if (r[R_HOUR] === null) continue;
+    const day = new Date(r[R_DATE] + "T00:00Z").getUTCDay();
+    max = Math.max(max, ++counts[day][r[R_HOUR]]);
+  }
+  if (!max) return;
+  const W = Math.max(box.clientWidth, 480), LBL = 34, B = 18, GAP = 2;
+  const cw = (W - LBL - 4) / 24, ch = 20;
+  const H = 7 * ch + B;
+  const svg = el("svg", { width: "100%", viewBox: `0 0 ${W} ${H}`, role: "img",
+                          "aria-label": "Reports by day of week and hour" }, box);
+  for (let d = 0; d < 7; d++) {
+    el("text", { x: LBL - 8, y: d * ch + ch / 2 + 4, "text-anchor": "end" }, svg)
+      .textContent = DAYS[d];
+    for (let h = 0; h < 24; h++) {
+      const v = counts[d][h];
+      const cell = el("rect", {
+        x: LBL + h * cw, y: d * ch, width: cw - GAP, height: ch - GAP, rx: 3,
+        fill: v ? rampColor(v / max) : cssVar("--wash"),
+      }, svg);
+      const label = `${DAYS[d]} ${(h % 12 || 12)}–${((h + 1) % 12 || 12)} ${h < 11 ? "am" : h < 23 ? "pm" : "am"}`;
+      cell.addEventListener("pointermove", ev => {
+        cell.setAttribute("stroke", cssVar("--ink"));
+        showTip(tipRows(v.toLocaleString() + " reports", label), ev.clientX, ev.clientY);
+      });
+      cell.addEventListener("pointerleave", () => {
+        cell.removeAttribute("stroke"); hideTip();
+      });
+    }
+  }
+  for (const h of [0, 6, 12, 18]) {
+    el("text", { x: LBL + h * cw + cw / 2, y: H - 4, "text-anchor": "middle" }, svg)
+      .textContent = h === 0 ? "12am" : h === 12 ? "12pm" : (h % 12) + (h < 12 ? "am" : "pm");
+  }
+}
+
+function topLocations(recs, pts) {
+  const box = document.getElementById("top-locations");
+  box.replaceChildren();
+  const counts = new Map();
+  for (const r of recs) {
+    if (r[R_LOC] !== null) counts.set(r[R_LOC], (counts.get(r[R_LOC]) || 0) + 1);
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const coordsOf = new Map();
+  for (const r of pts) {
+    if (!coordsOf.has(r[R_LOC])) coordsOf.set(r[R_LOC], [r[R_LAT], r[R_LON]]);
+  }
+  const tbl = document.createElement("table");
+  for (const [locIdx, n] of top) {
+    const row = tbl.insertRow();
+    const cName = row.insertCell(), cN = row.insertCell();
+    cName.textContent = DATA.locations[locIdx];
+    cN.textContent = n.toLocaleString();
+    const coords = coordsOf.get(locIdx);
+    if (coords) {
+      row.style.cursor = "pointer";
+      row.tabIndex = 0;
+      const go = () => {
+        map.setView(coords, 15);
+        document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "center" });
+      };
+      row.addEventListener("click", go);
+      row.addEventListener("keydown", ev => { if (ev.key === "Enter") go(); });
+    }
+  }
+  box.appendChild(tbl);
+}
+
+function gapChart() {
+  const box = document.getElementById("chart-gaps");
+  box.replaceChildren();
+  const gaps = DATA.case_gaps;
+  if (!gaps.length) return;
+  const W = Math.max(box.clientWidth, 280), H = 170, B = 20, T = 12, L = 36;
+  const bw = (W - L - 6) / gaps.length;
+  const svg = el("svg", { width: "100%", viewBox: `0 0 ${W} ${H}`, role: "img",
+                          "aria-label": "Share of case numbers published, per year" }, box);
+  for (const g of [1, 0.5]) {
+    const y = T + (H - T - B) * (1 - g);
+    el("line", { x1: L, x2: W - 6, y1: y, y2: y, stroke: cssVar("--grid") }, svg);
+    el("text", { x: L - 6, y: y + 4, "text-anchor": "end" }, svg)
+      .textContent = g * 100 + "%";
+  }
+  el("line", { x1: L, x2: W - 6, y1: H - B, y2: H - B, stroke: cssVar("--axis") }, svg);
+  gaps.forEach(([year, published, span], i) => {
+    const pct = published / span;
+    const bh = (H - T - B) * pct;
+    const bar = el("rect", { x: L + i * bw + 1, y: H - B - bh, width: bw - 2,
+                             height: Math.max(bh, 1), rx: 3, fill: cssVar("--accent") }, svg);
+    if (i % 2 === 0 || gaps.length <= 8) {
+      el("text", { x: L + i * bw + bw / 2, y: H - 5, "text-anchor": "middle" }, svg)
+        .textContent = year;
+    }
+    const hit = el("rect", { x: L + i * bw, y: 0, width: bw, height: H,
+                             fill: "transparent" }, svg);
+    hit.addEventListener("pointermove", ev => {
+      bar.setAttribute("fill", cssVar("--accent-strong"));
+      showTip(tipRows(Math.round(pct * 100) + "% published",
+        `${year}: ${published.toLocaleString()} of ~${span.toLocaleString()} case numbers`),
+        ev.clientX, ev.clientY);
+    });
+    hit.addEventListener("pointerleave", () => {
+      bar.setAttribute("fill", cssVar("--accent")); hideTip();
+    });
+  });
+}
+
 /* ---------- render ---------- */
 function renderAll() {
   const recs = filtered();
@@ -449,6 +593,9 @@ function renderAll() {
   barChart("chart-cats", top, i => catNames[i]);
 
   hourChart(recs);
+  weekGrid(recs);
+  topLocations(recs, pts);
+  gapChart();
 }
 
 /* ---------- boot ---------- */
